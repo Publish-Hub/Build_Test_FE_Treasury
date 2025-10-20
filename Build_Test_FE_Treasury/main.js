@@ -746,10 +746,14 @@ class JwtInterceptor {
    * - Uses "Authorization" in normal mode
    */
   addAuth(req, token) {
-    // const headerName = this.tokenStore.isSingleSignOnMode
-    //     ? 'HubAuthorization'
-    //     : 'Authorization';
-    const headerName = 'Authorization';
+    let headerName;
+    if (req.url.includes('GetAccess')) {
+      headerName = 'HubAuthorization';
+    } else if (req.url.includes('RefreshThirdPartyToken')) {
+      headerName = 'Authorization';
+    } else {
+      headerName = 'HubAuthorization';
+    }
     return req.clone({
       setHeaders: {
         [headerName]: `Bearer ${token}`
