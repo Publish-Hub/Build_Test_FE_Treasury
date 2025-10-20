@@ -331,8 +331,16 @@ class HeaderComponent {
     this.onWindowResize();
     const token = this.authService.getDecodedToken();
     if (token?.Role) {
-      const role = JSON.parse(token.Role);
-      localStorage.setItem('trole', JSON.stringify(role));
+      try {
+        const parsedRole = JSON.parse(token.Role);
+        const role = {
+          roleId: parsedRole.RoleId,
+          name: parsedRole.Name
+        };
+        localStorage.setItem('trole', JSON.stringify(role));
+      } catch (err) {
+        console.error('Error parsing role from token:', err);
+      }
     }
     const {
       firstName,
