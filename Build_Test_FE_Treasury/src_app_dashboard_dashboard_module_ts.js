@@ -324,6 +324,7 @@ class HeaderComponent {
     this.fullName = '';
     this.firstName = '';
     this.lastName = '';
+    this.email = '';
     this.portalList = [];
   }
   ngOnInit() {
@@ -345,6 +346,7 @@ class HeaderComponent {
     this.firstName = firstName;
     this.lastName = lastName;
     this.fullName = firstName + ' ' + lastName;
+    this.loadUserNames();
     this.getPortals();
   }
   ngOnDestroy() {
@@ -373,6 +375,48 @@ class HeaderComponent {
     var token = localStorage.getItem("token");
     const url = `${item?.description}/login?token=${token}&redirectUrl=${this.document.location.origin}`;
     window.location.replace(url);
+  }
+  loadUserNames() {
+    try {
+      const employeeDataRaw = localStorage.getItem('employeeData');
+      if (employeeDataRaw) {
+        const employeeData = JSON.parse(employeeDataRaw);
+        const data = employeeData?.Data;
+        if (data) {
+          this.firstName = data.FirstName || '';
+          this.lastName = data.LastName || data.SecondName || '';
+          this.fullName = data.Name || `${this.firstName} ${this.lastName}`.trim();
+          this.email = data.Email || '';
+          return;
+        }
+      }
+      const user = this.tokenService.getUser;
+      if (user && (user.fullName || user.FirstName)) {
+        this.fullName = user.fullName || `${user.FirstName || ''} ${user.LastName || user.SecondName || ''}`.trim();
+        this.firstName = this.tokenService.firstName || '';
+        this.lastName = this.tokenService.lastName || '';
+        this.email = user.Email || '';
+        return;
+      }
+      const fullNameFromStorage = localStorage.getItem('fullName');
+      if (fullNameFromStorage) {
+        const parts = fullNameFromStorage.split(' ');
+        this.fullName = fullNameFromStorage;
+        this.firstName = parts[0] || '';
+        this.lastName = parts[1] || '';
+        return;
+      }
+      this.firstName = '';
+      this.lastName = '';
+      this.fullName = '';
+      this.email = '';
+    } catch (err) {
+      console.error('Error loading user names:', err);
+      this.firstName = '';
+      this.lastName = '';
+      this.fullName = '';
+      this.email = '';
+    }
   }
 }
 HeaderComponent.ɵfac = function HeaderComponent_Factory(t) {
