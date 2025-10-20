@@ -329,26 +329,47 @@ class HeaderComponent {
   }
   ngOnInit() {
     this.onWindowResize();
-    const token = this.authService.getDecodedToken();
-    if (token?.Role) {
-      try {
+    try {
+      const token = this.authService.getDecodedToken();
+      console.log("token", token);
+      if (token?.Role) {
         const parsedRole = JSON.parse(token.Role);
-        const role = {
-          roleId: parsedRole.RoleId,
-          name: parsedRole.Name
-        };
-        localStorage.setItem('trole', JSON.stringify(role));
+        if (parsedRole && parsedRole.RoleId && parsedRole.Name) {
+          const role = {
+            roleId: parsedRole.RoleId,
+            name: parsedRole.Name
+          };
+          localStorage.setItem('trole', JSON.stringify(role));
+        } else {
+          console.warn('Role object missing expected properties:', parsedRole);
+        }
+      } else {
+        console.warn('No Role field found in token:', token);
+      }
+    } catch (error) {
+      console.error('Error parsing Role from token:', error);
+    }
+    // Safely read from localStorage
+    const troleRaw = localStorage.getItem('trole');
+    if (troleRaw) {
+      try {
+        const trole = JSON.parse(troleRaw);
+        if (trole?.roleId && trole?.name) {
+          console.log('Loaded role:', trole);
+        } else {
+          console.warn('trole missing properties:', trole);
+        }
       } catch (err) {
-        console.error('Error parsing role from token:', err);
+        console.error('Error reading trole:', err);
       }
     }
     const {
       firstName,
       lastName
-    } = this.tokenService.getFirstAndLastName();
-    this.firstName = firstName;
-    this.lastName = lastName;
-    this.fullName = `${firstName} ${lastName}`.trim();
+    } = this.tokenService.getFirstAndLastName() || {};
+    this.firstName = firstName || '';
+    this.lastName = lastName || '';
+    this.fullName = `${this.firstName} ${this.lastName}`.trim();
     this.loadUserNames();
     this.getPortals();
   }
