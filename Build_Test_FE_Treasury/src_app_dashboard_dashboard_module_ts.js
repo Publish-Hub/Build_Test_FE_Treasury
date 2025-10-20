@@ -329,23 +329,18 @@ class HeaderComponent {
   }
   ngOnInit() {
     this.onWindowResize();
-    this.authService.getLoggedUserDetails().subscribe(result => {
-      let {
-        roleId,
-        name
-      } = result?.data?.role;
-      localStorage.setItem('trole', JSON.stringify({
-        roleId,
-        name
-      }));
-    });
+    const token = this.authService.getDecodedToken();
+    if (token?.Role) {
+      const role = JSON.parse(token.Role);
+      localStorage.setItem('trole', JSON.stringify(role));
+    }
     const {
       firstName,
       lastName
     } = this.tokenService.getFirstAndLastName();
     this.firstName = firstName;
     this.lastName = lastName;
-    this.fullName = firstName + ' ' + lastName;
+    this.fullName = `${firstName} ${lastName}`.trim();
     this.loadUserNames();
     this.getPortals();
   }
