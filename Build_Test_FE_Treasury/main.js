@@ -494,6 +494,18 @@ function validateAccessToken(tokenStore, http, authService, router, getAccessEnd
         url: getAccessEndpoint
       });
     }
+    const userId = response?.enhancedUserDetails?.userId;
+    const roleId = response?.enhancedUserDetails?.roles?.roleId;
+    const roleName = response?.enhancedUserDetails?.roles?.roleName || response?.enhancedUserDetails?.roles?.name;
+    if (userId) localStorage.setItem('userId', userId.toString());
+    if (roleId) localStorage.setItem('roleId', roleId.toString());
+    if (roleName) localStorage.setItem('roleName', roleName);
+    if (roleId && roleName) {
+      localStorage.setItem('trole', JSON.stringify({
+        roleId,
+        name: roleName
+      }));
+    }
     return true;
   }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_10__.catchError)(err => {
     return handleAccessError(err, tokenStore, authService, router, getAccessEndpoint, http);
@@ -813,7 +825,7 @@ class AuthService {
   }
   get userId() {
     const token = this.getDecodedToken();
-    return token ? Number(token.nameid) : null;
+    return token ? Number(token.nameid) : localStorage.getItem('userId') ? Number(localStorage.getItem('userId')) : localStorage.getItem('employeeId') ? Number(localStorage.getItem('employeeId')) : null;
   }
   get getUserRole() {
     return JSON.parse(localStorage.getItem('trole') || 'null');

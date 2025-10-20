@@ -329,6 +329,17 @@ class HeaderComponent {
   }
   ngOnInit() {
     this.onWindowResize();
+    this.authService.getLoggedUserDetails().subscribe(result => {
+      this.fullName = result?.data?.fullName;
+      let {
+        roleId,
+        name
+      } = result?.data?.role;
+      localStorage.setItem('trole', JSON.stringify({
+        roleId,
+        name
+      }));
+    });
     try {
       const token = this.authService.getDecodedToken();
       console.log("token", token);
