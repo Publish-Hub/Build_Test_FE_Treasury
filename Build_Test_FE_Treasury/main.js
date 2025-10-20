@@ -240,6 +240,8 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! @angular/core */ 2560);
 /* harmony import */ var _angular_router__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @angular/router */ 124);
 /* harmony import */ var _shared_services_token_service__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../shared/services/token.service */ 8128);
+/* harmony import */ var _auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! @auth0/angular-jwt */ 4467);
+
 
 
 
@@ -247,33 +249,75 @@ __webpack_require__.r(__webpack_exports__);
 
 
 class AuthComponent {
-  constructor(router, activatedRoute, tokenService) {
+  constructor(router, activatedRoute, _tokenService, jwtService) {
     this.router = router;
     this.activatedRoute = activatedRoute;
-    this.tokenService = tokenService;
+    this._tokenService = _tokenService;
+    this.jwtService = jwtService;
     this.unsubscribe = new rxjs__WEBPACK_IMPORTED_MODULE_2__.Subject();
   }
   ngOnInit() {
+    if (src_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.bypassAuth) {
+      this.router.navigateByUrl('/dashboard');
+      return;
+    }
     this.activatedRoute.queryParams.pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_3__.takeUntil)(this.unsubscribe)).subscribe(params => {
-      const redirectUrl = params['redirectUrl'] || '/';
       const urlToken = params['token'];
+      const redirect = params['redirectUrl'] || '/dashboard';
+      const userDepartment = params['userDepartment'] || null;
+      const userDepartmentId = params['userDepartmentID'] || null;
+      localStorage.setItem('userDepartment', userDepartment);
+      localStorage.setItem('userDepartmentId', userDepartmentId);
+      const localToken = this._tokenService.token;
+      const ssoToken = this._tokenService.ssoAccessToken;
+      // 1) Normal app login via ?token=...
       if (urlToken) {
-        localStorage.clear();
-        localStorage.setItem('redirectUrl', redirectUrl);
-        this.tokenService.setToken(urlToken);
-        this.router.navigate(['/']);
+        try {
+          localStorage.setItem('redirectUrl', redirect);
+          this._tokenService.saveToken(urlToken);
+          const payload = this.jwtService.decodeToken(urlToken);
+          if (payload) {
+            this._tokenService.saveUser(payload);
+            this.router.navigateByUrl('/dashboard');
+          } else {
+            this.router.navigateByUrl('/unauthorized');
+          }
+        } catch (e) {
+          console.error('Login error (url token):', e);
+          this.router.navigateByUrl('/unauthorized');
+        }
         return;
       }
-      const localToken = localStorage.getItem('token');
-      const ssoAccess = this.tokenService.ssoAccessToken;
-      const ssoRefresh = this.tokenService.ssoRefreshToken;
-      const sessionToken = sessionStorage.getItem('token');
-      const hasAnyToken = !!(localToken || ssoAccess || ssoRefresh || sessionToken);
-      if (!hasAnyToken) {
+      if (!localToken && ssoToken) {
+        try {
+          if (!localStorage.getItem('redirectUrl')) {
+            localStorage.setItem('redirectUrl', redirect);
+          }
+          const decoded = this.jwtService.decodeToken(ssoToken);
+          if (!decoded) {
+            this.router.navigateByUrl('/unauthorized');
+            return;
+          }
+          const id = decoded.nameid ?? decoded.UserID ?? decoded.sid ?? decoded.sub ?? decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/sid'] ?? decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? null;
+          this._tokenService.saveUser({
+            nameid: id,
+            UserID: id,
+            fullName: decoded.unique_name ?? decoded.name ?? '',
+            userPortals: decoded.userPortals ?? []
+          });
+          const redirectUrl = localStorage.getItem('redirectUrl') || '/dashboard';
+          localStorage.removeItem('redirectUrl');
+          this.router.navigateByUrl(redirectUrl);
+        } catch (e) {
+          console.error('Login error (SSO cookie):', e);
+          this.router.navigateByUrl('/unauthorized');
+        }
+        return;
+      }
+      if (!urlToken && !ssoToken) {
         window.location.href = src_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.portalUrl;
         return;
       }
-      this.router.navigate(['/']);
     });
   }
   ngOnDestroy() {
@@ -282,7 +326,7 @@ class AuthComponent {
   }
 }
 AuthComponent.ɵfac = function AuthComponent_Factory(t) {
-  return new (t || AuthComponent)(_angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdirectiveInject"](_angular_router__WEBPACK_IMPORTED_MODULE_5__.Router), _angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdirectiveInject"](_angular_router__WEBPACK_IMPORTED_MODULE_5__.ActivatedRoute), _angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdirectiveInject"](_shared_services_token_service__WEBPACK_IMPORTED_MODULE_1__.TokenService));
+  return new (t || AuthComponent)(_angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdirectiveInject"](_angular_router__WEBPACK_IMPORTED_MODULE_5__.Router), _angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdirectiveInject"](_angular_router__WEBPACK_IMPORTED_MODULE_5__.ActivatedRoute), _angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdirectiveInject"](_shared_services_token_service__WEBPACK_IMPORTED_MODULE_1__.TokenService), _angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdirectiveInject"](_auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_6__.JwtHelperService));
 };
 AuthComponent.ɵcmp = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_4__["ɵɵdefineComponent"]({
   type: AuthComponent,
@@ -330,8 +374,6 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-const PORTAL_ID = '9011'; // Accounts Portal ID
-const SESSION_FLAG_CLICK = `portalClick:${PORTAL_ID}`;
 const SESSION_FLAG_USER = `ssoUserSaved`;
 const DEV_BYPASS = false;
 const authGuard = (route, state) => {
@@ -352,6 +394,9 @@ function handleAuthGuard(route, url) {
   const authService = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_shared_services_auth_service__WEBPACK_IMPORTED_MODULE_2__.AuthService);
   const router = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_angular_router__WEBPACK_IMPORTED_MODULE_6__.Router);
   const jwtHelper = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_7__.JwtHelperService);
+  if (url.startsWith('/login') || url.startsWith('/unauthorized')) {
+    return true;
+  }
   const getAccessEndpoint = `${src_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.masterBaseUrl.replace(/\/+$/, '')}/${_shared_api_urls__WEBPACK_IMPORTED_MODULE_3__.ApiUrls.User.GetAccess.replace(/^\/+/, '')}`;
   const urlToken = route.queryParams['token'];
   const localStorageToken = tokenStore.token;
@@ -511,6 +556,10 @@ function ensureSsoUserSaved(tokenStore, jwtHelper) {
   sessionStorage.setItem(SESSION_FLAG_USER, '1');
 }
 function redirect(returnUrl, router) {
+  const currentUrl = router.url;
+  if (currentUrl === '/login') {
+    return router.parseUrl('/unauthorized');
+  }
   if (returnUrl && returnUrl !== '/login') {
     localStorage.setItem('redirectUrl', returnUrl);
     localStorage.setItem('lastProtectedUrl', returnUrl);
@@ -725,20 +774,18 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "AuthService": () => (/* binding */ AuthService)
 /* harmony export */ });
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! rxjs */ 6317);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! rxjs */ 745);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! rxjs */ 5474);
-/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! rxjs/operators */ 635);
-/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! rxjs/operators */ 9337);
-/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! rxjs/operators */ 3158);
+/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! rxjs */ 6317);
+/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! rxjs */ 745);
+/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! rxjs */ 5474);
+/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! rxjs/operators */ 635);
+/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! rxjs/operators */ 3158);
+/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! rxjs/operators */ 2313);
 /* harmony import */ var _environments_environment__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../../../environments/environment */ 2340);
-/* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! @angular/core */ 2560);
-/* harmony import */ var _auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(/*! @auth0/angular-jwt */ 4467);
+/* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! @angular/core */ 2560);
+/* harmony import */ var _auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! @auth0/angular-jwt */ 4467);
 /* harmony import */ var _token_service__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./token.service */ 8128);
 /* harmony import */ var _user_service__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./user.service */ 8613);
-/* harmony import */ var _angular_common_http__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(/*! @angular/common/http */ 8987);
-/* harmony import */ var _refresh_service__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./refresh.service */ 2176);
-
+/* harmony import */ var _angular_common_http__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(/*! @angular/common/http */ 8987);
 
 
 
@@ -748,18 +795,18 @@ __webpack_require__.r(__webpack_exports__);
 
 
 class AuthService {
-  constructor(jwtHelperService, tokenService, userService, http, refreshService) {
+  constructor(jwtHelperService, tokenService, userService, http) {
     this.jwtHelperService = jwtHelperService;
     this.tokenService = tokenService;
     this.userService = userService;
     this.http = http;
-    this.refreshService = refreshService;
     this._isRefreshing = false;
-    this._tokenSubject = new rxjs__WEBPACK_IMPORTED_MODULE_4__.BehaviorSubject(null);
+    this._tokenSubject = new rxjs__WEBPACK_IMPORTED_MODULE_3__.BehaviorSubject(null);
     this.refreshUrl = `${_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.masterBaseUrl?.replace(/\/+$/, '')}/User/RefreshThirdPartyToken`;
-    this.isRefreshing = false;
-    this.tokenSubject = new rxjs__WEBPACK_IMPORTED_MODULE_4__.BehaviorSubject(null);
   }
+  // ───────────────────────────
+  // User Info Helpers
+  // ───────────────────────────
   get userId() {
     const token = this.getDecodedToken();
     return token ? Number(token.nameid) : null;
@@ -771,7 +818,7 @@ class AuthService {
     try {
       return this.jwtHelperService.decodeToken(this.tokenService.token);
     } catch (error) {
-      console.error('Token decode error:', error);
+      console.error('[AuthService] Token decode error:', error);
       return null;
     }
   }
@@ -779,15 +826,25 @@ class AuthService {
     if (this.userId) {
       return this.userService.getUserDetails(this.userId);
     }
-    return (0,rxjs__WEBPACK_IMPORTED_MODULE_5__.of)(null);
+    return (0,rxjs__WEBPACK_IMPORTED_MODULE_4__.of)(null);
   }
+  // ───────────────────────────
+  // Refresh Token Logic
+  // ───────────────────────────
   refreshToken(refreshToken) {
+    if (this._isRefreshing) {
+      // Already refreshing, skip duplicate
+      return this._tokenSubject.pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_5__.map)(token => ({
+        accessToken: token || '',
+        refreshToken
+      })));
+    }
     this._isRefreshing = true;
     this._tokenSubject.next(null);
     const body = {
       RefreshToken: refreshToken
     };
-    return this.http.post(this.refreshUrl, body).pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_6__.map)(res => {
+    return this.http.post(this.refreshUrl, body).pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_5__.map)(res => {
       if (!res?.Status || !res?.Data?.AccessToken) {
         throw new Error(res?.Message || res?.Error || 'Invalid refresh response');
       }
@@ -796,17 +853,18 @@ class AuthService {
       if (res.Data.RefreshToken) {
         this.tokenService.ssoRefreshTokenSet(res.Data.RefreshToken);
       }
-      // Notify interceptors / guard waiting on new token
+      // Notify interceptors / guards waiting for a new token
       this._tokenSubject.next(res.Data.AccessToken);
       return {
         accessToken: res.Data.AccessToken,
         refreshToken: res.Data.RefreshToken
       };
-    }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_7__.tap)(() => this._isRefreshing = false), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_8__.catchError)(err => {
+    }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_6__.catchError)(err => {
       console.error('[AuthService.refreshToken] Error:', err);
-      this._isRefreshing = false;
       this.tokenService.signOut();
-      return (0,rxjs__WEBPACK_IMPORTED_MODULE_9__.throwError)(() => err);
+      return (0,rxjs__WEBPACK_IMPORTED_MODULE_7__.throwError)(() => err);
+    }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_8__.finalize)(() => {
+      this._isRefreshing = false;
     }));
   }
   getRefreshState() {
@@ -815,20 +873,22 @@ class AuthService {
       tokenSubject: this._tokenSubject.asObservable()
     };
   }
+  // ───────────────────────────
+  // Logout Logic
+  // ───────────────────────────
   logout() {
-    if (_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.includes('test')) {
-      window.location.href = 'https://dx-portalstest.azurewebsites.net/main-menu';
-    } else if (_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.includes('dev')) {
-      window.location.href = 'https://portals-dx-fe-dev.azurewebsites.net/main-menu';
-    } else {
-      window.location.href = 'https://dx-portalsstage.azurewebsites.net/main-menu';
-    }
+    const url = _environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.portalUrl || (() => {
+      if (_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.includes('test')) return 'https://dx-portalstest.azurewebsites.net/main-menu';
+      if (_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.includes('dev')) return 'https://portals-dx-fe-dev.azurewebsites.net/main-menu';
+      return 'https://dx-portalsstage.azurewebsites.net/main-menu';
+    })();
+    window.location.href = url;
   }
 }
 AuthService.ɵfac = function AuthService_Factory(t) {
-  return new (t || AuthService)(_angular_core__WEBPACK_IMPORTED_MODULE_10__["ɵɵinject"](_auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_11__.JwtHelperService), _angular_core__WEBPACK_IMPORTED_MODULE_10__["ɵɵinject"](_token_service__WEBPACK_IMPORTED_MODULE_1__.TokenService), _angular_core__WEBPACK_IMPORTED_MODULE_10__["ɵɵinject"](_user_service__WEBPACK_IMPORTED_MODULE_2__.UserService), _angular_core__WEBPACK_IMPORTED_MODULE_10__["ɵɵinject"](_angular_common_http__WEBPACK_IMPORTED_MODULE_12__.HttpClient), _angular_core__WEBPACK_IMPORTED_MODULE_10__["ɵɵinject"](_refresh_service__WEBPACK_IMPORTED_MODULE_3__.ThirdPartyRefreshService));
+  return new (t || AuthService)(_angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵinject"](_auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_10__.JwtHelperService), _angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵinject"](_token_service__WEBPACK_IMPORTED_MODULE_1__.TokenService), _angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵinject"](_user_service__WEBPACK_IMPORTED_MODULE_2__.UserService), _angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵinject"](_angular_common_http__WEBPACK_IMPORTED_MODULE_11__.HttpClient));
 };
-AuthService.ɵprov = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_10__["ɵɵdefineInjectable"]({
+AuthService.ɵprov = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵdefineInjectable"]({
   token: AuthService,
   factory: AuthService.ɵfac,
   providedIn: 'root'
@@ -1161,96 +1221,6 @@ HelperService.ɵprov = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_2__["
 
 /***/ }),
 
-/***/ 2176:
-/*!****************************************************!*\
-  !*** ./src/app/shared/services/refresh.service.ts ***!
-  \****************************************************/
-/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
-
-__webpack_require__.r(__webpack_exports__);
-/* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   "ThirdPartyRefreshService": () => (/* binding */ ThirdPartyRefreshService)
-/* harmony export */ });
-/* harmony import */ var _angular_common_http__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! @angular/common/http */ 8987);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! rxjs */ 116);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! rxjs */ 635);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! rxjs */ 9337);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! rxjs */ 3158);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! rxjs */ 5474);
-/* harmony import */ var src_environments_environment__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! src/environments/environment */ 2340);
-/* harmony import */ var _api_urls__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../api-urls */ 6296);
-/* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! @angular/core */ 2560);
-/* harmony import */ var _token_service__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./token.service */ 8128);
-
-
-
-
-
-
-
-class ThirdPartyRefreshService {
-  constructor(handler, tokenStore) {
-    this.tokenStore = tokenStore;
-    this.endpoint = `${src_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.masterBaseUrl.replace(/\/+$/, '')}/${_api_urls__WEBPACK_IMPORTED_MODULE_1__.ApiUrls.User.RefreshThirdPartyToken.replace(/^\/+/, '')}`;
-    this.http = new _angular_common_http__WEBPACK_IMPORTED_MODULE_3__.HttpClient(handler);
-  }
-  refresh(refreshToken, authToken) {
-    const bearer = authToken ?? this.tokenStore.ssoAccessToken ?? this.tokenStore.token ?? null;
-    let req = new _angular_common_http__WEBPACK_IMPORTED_MODULE_3__.HttpRequest('POST', this.endpoint, {
-      RefreshToken: refreshToken
-    }, {
-      headers: new _angular_common_http__WEBPACK_IMPORTED_MODULE_3__.HttpHeaders({
-        'Content-Type': 'application/json'
-      }),
-      reportProgress: false,
-      responseType: 'json'
-    });
-    if (bearer) {
-      req = this.addAuth(req, bearer, 'HubAuthorization');
-    }
-    return this.http.request(req).pipe((0,rxjs__WEBPACK_IMPORTED_MODULE_4__.filter)(evt => evt instanceof _angular_common_http__WEBPACK_IMPORTED_MODULE_3__.HttpResponse), (0,rxjs__WEBPACK_IMPORTED_MODULE_5__.map)(evt => evt.body), (0,rxjs__WEBPACK_IMPORTED_MODULE_6__.tap)({
-      next: res => {
-        if (res?.Data?.AccessToken) {
-          this.tokenStore.ssoAccessTokenSet(res.Data.AccessToken);
-          if (res.Data.RefreshToken) {
-            this.tokenStore.ssoRefreshTokenSet(res.Data.RefreshToken);
-          }
-        }
-      }
-    }), (0,rxjs__WEBPACK_IMPORTED_MODULE_5__.map)(res => {
-      if (!res?.Status) {
-        throw new Error(`Refresh failed: ${res?.Message || res?.Error || 'Unknown error'}`);
-      }
-      if (!res?.Data?.AccessToken) {
-        throw new Error(`Invalid refresh response: ${res?.Message || 'No access token'}`);
-      }
-      return {
-        accessToken: res.Data.AccessToken,
-        refreshToken: res.Data.RefreshToken
-      };
-    }), (0,rxjs__WEBPACK_IMPORTED_MODULE_7__.catchError)(err => {
-      return (0,rxjs__WEBPACK_IMPORTED_MODULE_8__.throwError)(() => err);
-    }));
-  }
-  addAuth(req, token, headerName) {
-    return req.clone({
-      setHeaders: {
-        [headerName]: `Bearer ${token}`
-      }
-    });
-  }
-}
-ThirdPartyRefreshService.ɵfac = function ThirdPartyRefreshService_Factory(t) {
-  return new (t || ThirdPartyRefreshService)(_angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵinject"](_angular_common_http__WEBPACK_IMPORTED_MODULE_3__.HttpBackend), _angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵinject"](_token_service__WEBPACK_IMPORTED_MODULE_2__.TokenService));
-};
-ThirdPartyRefreshService.ɵprov = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_9__["ɵɵdefineInjectable"]({
-  token: ThirdPartyRefreshService,
-  factory: ThirdPartyRefreshService.ɵfac,
-  providedIn: 'root'
-});
-
-/***/ }),
-
 /***/ 8128:
 /*!**************************************************!*\
   !*** ./src/app/shared/services/token.service.ts ***!
@@ -1269,9 +1239,12 @@ const TOKEN_KEY = 'token';
 const REFRESH_TOKEN_KEY = 'MarkaziaRefreshToken';
 const USER_KEY = 'currentUser';
 class TokenService {
+  saveToken(token) {
+    localStorage.setItem(TOKEN_KEY, token);
+  }
   get token() {
     let accessToken = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || '';
-    if (!accessToken && !_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.production) {
+    if (!accessToken && !_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.production && _environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.bypassAuth) {
       accessToken = _environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.generalToken;
     }
     return accessToken;
