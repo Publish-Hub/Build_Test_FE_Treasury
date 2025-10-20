@@ -11,18 +11,19 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
 /* harmony export */   "DashboardRoutingModule": () => (/* binding */ DashboardRoutingModule)
 /* harmony export */ });
-/* harmony import */ var _angular_router__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! @angular/router */ 124);
-/* harmony import */ var _dashboard_component__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./dashboard.component */ 7528);
-/* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @angular/core */ 2560);
+/* harmony import */ var _angular_router__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! @angular/router */ 124);
+/* harmony import */ var _auth_auth_guard__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../auth/auth.guard */ 3870);
+/* harmony import */ var _dashboard_component__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./dashboard.component */ 7528);
+/* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! @angular/core */ 2560);
+
 
 
 
 
 const routes = [{
   path: '',
-  component: _dashboard_component__WEBPACK_IMPORTED_MODULE_0__.DashboardComponent,
-  // canActivate: [],
-  // canActivateChild: [authGuard],
+  component: _dashboard_component__WEBPACK_IMPORTED_MODULE_1__.DashboardComponent,
+  canActivate: [_auth_auth_guard__WEBPACK_IMPORTED_MODULE_0__.authGuard],
   children: [{
     path: 'profile',
     loadChildren: () => __webpack_require__.e(/*! import() */ "src_app_profile_profile_module_ts").then(__webpack_require__.bind(__webpack_require__, /*! ../profile/profile.module */ 4523)).then(m => m.ProfileModule)
@@ -36,24 +37,22 @@ const routes = [{
     path: '',
     redirectTo: 'deposit-cheque',
     pathMatch: 'full'
-  } // Make sure this route is defined after other child routes
-  ]
+  }]
 }];
-
 class DashboardRoutingModule {}
 DashboardRoutingModule.ɵfac = function DashboardRoutingModule_Factory(t) {
   return new (t || DashboardRoutingModule)();
 };
-DashboardRoutingModule.ɵmod = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_1__["ɵɵdefineNgModule"]({
+DashboardRoutingModule.ɵmod = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_2__["ɵɵdefineNgModule"]({
   type: DashboardRoutingModule
 });
-DashboardRoutingModule.ɵinj = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_1__["ɵɵdefineInjector"]({
-  imports: [_angular_router__WEBPACK_IMPORTED_MODULE_2__.RouterModule.forChild(routes), _angular_router__WEBPACK_IMPORTED_MODULE_2__.RouterModule]
+DashboardRoutingModule.ɵinj = /*@__PURE__*/_angular_core__WEBPACK_IMPORTED_MODULE_2__["ɵɵdefineInjector"]({
+  imports: [_angular_router__WEBPACK_IMPORTED_MODULE_3__.RouterModule.forChild(routes), _angular_router__WEBPACK_IMPORTED_MODULE_3__.RouterModule]
 });
 (function () {
-  (typeof ngJitMode === "undefined" || ngJitMode) && _angular_core__WEBPACK_IMPORTED_MODULE_1__["ɵɵsetNgModuleScope"](DashboardRoutingModule, {
-    imports: [_angular_router__WEBPACK_IMPORTED_MODULE_2__.RouterModule],
-    exports: [_angular_router__WEBPACK_IMPORTED_MODULE_2__.RouterModule]
+  (typeof ngJitMode === "undefined" || ngJitMode) && _angular_core__WEBPACK_IMPORTED_MODULE_2__["ɵɵsetNgModuleScope"](DashboardRoutingModule, {
+    imports: [_angular_router__WEBPACK_IMPORTED_MODULE_3__.RouterModule],
+    exports: [_angular_router__WEBPACK_IMPORTED_MODULE_3__.RouterModule]
   });
 })();
 

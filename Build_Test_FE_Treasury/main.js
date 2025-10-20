@@ -310,16 +310,17 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! @angular/core */ 2560);
 /* harmony import */ var _angular_router__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @angular/router */ 124);
 /* harmony import */ var _angular_common_http__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! @angular/common/http */ 8987);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! rxjs */ 745);
-/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! rxjs */ 5474);
-/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! rxjs/operators */ 635);
-/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! rxjs/operators */ 3158);
-/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(/*! rxjs/operators */ 116);
-/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(/*! rxjs/operators */ 9295);
+/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_8__ = __webpack_require__(/*! rxjs */ 745);
+/* harmony import */ var rxjs__WEBPACK_IMPORTED_MODULE_11__ = __webpack_require__(/*! rxjs */ 5474);
+/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_9__ = __webpack_require__(/*! rxjs/operators */ 635);
+/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_10__ = __webpack_require__(/*! rxjs/operators */ 3158);
+/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_12__ = __webpack_require__(/*! rxjs/operators */ 116);
+/* harmony import */ var rxjs_operators__WEBPACK_IMPORTED_MODULE_13__ = __webpack_require__(/*! rxjs/operators */ 9295);
 /* harmony import */ var _environments_environment__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../../environments/environment */ 2340);
 /* harmony import */ var _shared_services_token_service__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../shared/services/token.service */ 8128);
 /* harmony import */ var _shared_services_auth_service__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../shared/services/auth.service */ 8915);
 /* harmony import */ var _shared_api_urls__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../shared/api-urls */ 6296);
+/* harmony import */ var _auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_7__ = __webpack_require__(/*! @auth0/angular-jwt */ 4467);
 
 
 
@@ -329,7 +330,8 @@ __webpack_require__.r(__webpack_exports__);
 
 
 
-const PORTAL_ID = '9001';
+
+const PORTAL_ID = '9004';
 const SESSION_FLAG_USER = 'ssoUserSaved';
 const SESSION_FLAG_CLICK = `portalClick:${PORTAL_ID}`;
 const DEV_BYPASS = false;
@@ -343,101 +345,193 @@ const authMatchGuard = (route, segments) => {
   }, url);
 };
 function handleAuthGuard(route, url) {
+  console.group('[AuthGuard] handleAuthGuard');
+  console.log('URL:', url);
   const router = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_angular_router__WEBPACK_IMPORTED_MODULE_5__.Router);
   const http = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_angular_common_http__WEBPACK_IMPORTED_MODULE_6__.HttpClient);
   const tokenService = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_shared_services_token_service__WEBPACK_IMPORTED_MODULE_1__.TokenService);
   const authService = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_shared_services_auth_service__WEBPACK_IMPORTED_MODULE_2__.AuthService);
+  const jwtHelper = (0,_angular_core__WEBPACK_IMPORTED_MODULE_4__.inject)(_auth0_angular_jwt__WEBPACK_IMPORTED_MODULE_7__.JwtHelperService);
   const urlToken = route.queryParams['token'];
   const localToken = tokenService.token;
   const ssoAccess = tokenService.ssoAccessToken;
   const ssoRefresh = tokenService.ssoRefreshToken;
   const inSsoMode = tokenService.isSingleSignOnMode;
   const getAccessEndpoint = `${_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.replace(/\/+$/, '')}/User/GetAccess`;
+  console.log('Auth state:', {
+    inSsoMode,
+    urlToken,
+    localToken,
+    ssoAccess,
+    ssoRefresh
+  });
+  if (_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.bypassAuth) {
+    console.warn('[AuthGuard] Auth bypass enabled (dev mode)');
+    console.groupEnd();
+    return true;
+  }
   if (urlToken) {
+    console.log('[AuthGuard] URL token detected, validating...');
     localStorage.setItem('redirectUrl', route.queryParams['redirectUrl'] || '/');
     tokenService.setToken(urlToken);
+    console.groupEnd();
     return validateAccessToken(tokenService, http, authService, router, getAccessEndpoint);
   }
   if (inSsoMode && ssoAccess && ssoRefresh) {
-    ensureSsoUserSaved(tokenService);
+    console.log('[AuthGuard] In SSO mode, validating SSO tokens...');
+    ensureSsoUserSaved(tokenService, jwtHelper);
     ensurePortalClickIfSso(tokenService, http);
+    console.groupEnd();
     return validateAccessToken(tokenService, http, authService, router, getAccessEndpoint);
   }
   if (localToken && localToken !== 'undefined') {
+    console.log('[AuthGuard] Local token found, allowing access.');
+    console.groupEnd();
     return true;
   }
+  console.warn('[AuthGuard] No valid token, redirecting to portal.');
+  console.groupEnd();
   return redirectToPortal(router);
 }
 function validateAccessToken(tokenService, http, authService, router, getAccessEndpoint) {
+  console.group('[AuthGuard] validateAccessToken');
   const token = tokenService.ssoAccessToken || tokenService.token;
-  if (!token) return (0,rxjs__WEBPACK_IMPORTED_MODULE_7__.of)(false);
+  if (!token) {
+    console.error('[AuthGuard] No token available for validation.');
+    console.groupEnd();
+    return (0,rxjs__WEBPACK_IMPORTED_MODULE_8__.of)(false);
+  }
+  console.log('[AuthGuard] Validating token with API:', getAccessEndpoint);
   return http.post(getAccessEndpoint, {
     token
-  }).pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_8__.map)(res => {
-    if (res?.Status === false) throw new _angular_common_http__WEBPACK_IMPORTED_MODULE_6__.HttpErrorResponse({
-      error: res,
-      status: 401
-    });
+  }).pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_9__.map)(res => {
+    console.log('[AuthGuard] Token validation response:', res);
+    if (res?.Status === false) {
+      console.error('[AuthGuard] Token validation failed.');
+      throw new _angular_common_http__WEBPACK_IMPORTED_MODULE_6__.HttpErrorResponse({
+        error: res,
+        status: 401
+      });
+    }
+    console.log('[AuthGuard] Token valid.');
+    console.groupEnd();
     return true;
-  }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_9__.catchError)(err => {
+  }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_10__.catchError)(err => {
+    console.error('[AuthGuard] Token validation error:', err);
     if (err instanceof _angular_common_http__WEBPACK_IMPORTED_MODULE_6__.HttpErrorResponse && tokenService.isSingleSignOnMode) {
+      console.log('[AuthGuard] Attempting refresh token flow...');
       const refreshToken = tokenService.ssoRefreshToken;
-      if (!refreshToken) return (0,rxjs__WEBPACK_IMPORTED_MODULE_7__.of)(false);
+      if (!refreshToken) {
+        console.error('[AuthGuard] No refresh token available.');
+        console.groupEnd();
+        return (0,rxjs__WEBPACK_IMPORTED_MODULE_8__.of)(false);
+      }
+      console.groupEnd();
       return refreshAndRetry(authService, tokenService, router);
     }
-    return (0,rxjs__WEBPACK_IMPORTED_MODULE_10__.throwError)(() => err);
+    console.groupEnd();
+    return (0,rxjs__WEBPACK_IMPORTED_MODULE_11__.throwError)(() => err);
   }));
 }
 function refreshAndRetry(authService, tokenService, router) {
+  console.group('[AuthGuard] refreshAndRetry');
   const {
     isRefreshing,
     tokenSubject
   } = authService.getRefreshState?.() ?? {
     isRefreshing: false,
-    tokenSubject: (0,rxjs__WEBPACK_IMPORTED_MODULE_7__.of)(null)
+    tokenSubject: (0,rxjs__WEBPACK_IMPORTED_MODULE_8__.of)(null)
   };
   if (!isRefreshing) {
+    console.log('[AuthGuard] Not currently refreshing, initiating new refresh request...');
     const refreshToken = tokenService.ssoRefreshToken;
-    if (!refreshToken) return (0,rxjs__WEBPACK_IMPORTED_MODULE_7__.of)(false);
-    return authService.refreshToken(refreshToken).pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_8__.map)(() => true), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_9__.catchError)(() => {
+    if (!refreshToken) {
+      console.error('[AuthGuard] No refresh token found, cannot refresh.');
+      console.groupEnd();
+      return (0,rxjs__WEBPACK_IMPORTED_MODULE_8__.of)(false);
+    }
+    return authService.refreshToken(refreshToken).pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_9__.map)(() => {
+      console.log('[AuthGuard] Token refresh successful.');
+      console.groupEnd();
+      return true;
+    }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_10__.catchError)(err => {
+      console.error('[AuthGuard] Token refresh failed, navigating to login.', err);
       router.navigate(['/login']);
-      return (0,rxjs__WEBPACK_IMPORTED_MODULE_7__.of)(false);
+      console.groupEnd();
+      return (0,rxjs__WEBPACK_IMPORTED_MODULE_8__.of)(false);
     }));
   }
-  return tokenSubject.pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_11__.filter)(t => !!t), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_12__.take)(1), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_8__.map)(() => true));
+  console.log('[AuthGuard] Waiting for ongoing refresh to complete...');
+  return tokenSubject.pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_12__.filter)(t => !!t), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_13__.take)(1), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_9__.map)(() => {
+    console.log('[AuthGuard] Received refreshed token.');
+    console.groupEnd();
+    return true;
+  }));
 }
 function ensurePortalClickIfSso(tokenService, http) {
-  if (sessionStorage.getItem(SESSION_FLAG_CLICK) === '1') return;
+  console.group('[AuthGuard] ensurePortalClickIfSso');
+  if (sessionStorage.getItem(SESSION_FLAG_CLICK) === '1') {
+    console.log('[AuthGuard] Portal click already recorded.');
+    console.groupEnd();
+    return;
+  }
   const userId = tokenService.currentUserId;
-  if (!userId) return;
+  if (!userId) {
+    console.warn('[AuthGuard] No user ID, skipping portal click.');
+    console.groupEnd();
+    return;
+  }
   const fd = new FormData();
   fd.append('UserID', String(userId));
   fd.append('PortalID', PORTAL_ID);
   const clickEndpoint = `${_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.replace(/\/+$/, '')}/${_shared_api_urls__WEBPACK_IMPORTED_MODULE_3__.ApiUrls.User.ClickPortal.replace(/^\/+/, '')}`;
+  console.log('[AuthGuard] Recording portal click via:', clickEndpoint);
   http.post(clickEndpoint, fd).subscribe({
-    next: () => sessionStorage.setItem(SESSION_FLAG_CLICK, '1'),
-    error: err => console.warn('ensurePortalClickIfSso failed', err)
+    next: () => {
+      console.log('[AuthGuard] Portal click recorded.');
+      sessionStorage.setItem(SESSION_FLAG_CLICK, '1');
+      console.groupEnd();
+    },
+    error: err => {
+      console.error('[AuthGuard] ensurePortalClickIfSso failed:', err);
+      console.groupEnd();
+    }
   });
 }
-function ensureSsoUserSaved(tokenService) {
-  if (DEV_BYPASS || sessionStorage.getItem(SESSION_FLAG_USER) === '1') return;
-  const token = tokenService.ssoAccessToken;
-  if (!token) return;
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    const id = payload?.nameid ?? payload?.UserID ?? payload?.sub ?? null;
-    const user = {
-      nameid: id,
-      UserID: id,
-      fullName: payload?.unique_name ?? payload?.name ?? ''
-    };
-    tokenService.saveUser(user);
-    sessionStorage.setItem(SESSION_FLAG_USER, '1');
-  } catch (err) {
-    console.error('SSO decode failed:', err);
+function ensureSsoUserSaved(tokenStore, jwtHelper) {
+  console.group('[AuthGuard] ensureSsoUserSaved');
+  if (DEV_BYPASS || !tokenStore.isSingleSignOnMode || sessionStorage.getItem(SESSION_FLAG_USER) === '1') {
+    console.log('[AuthGuard] User already saved or bypass active.');
+    console.groupEnd();
+    return;
   }
+  const token = tokenStore.ssoAccessToken;
+  if (!token) {
+    console.warn('[AuthGuard] No SSO token found for decoding.');
+    console.groupEnd();
+    return;
+  }
+  const decoded = jwtHelper.decodeToken(token);
+  console.log('[AuthGuard] Decoded token:', decoded);
+  if (!decoded) {
+    console.error('[AuthGuard] Token decoding failed.');
+    console.groupEnd();
+    return;
+  }
+  const id = decoded.nameid ?? decoded.UserID ?? decoded.sid ?? decoded.sub ?? decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/sid'] ?? decoded['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'] ?? null;
+  const user = {
+    nameid: id,
+    UserID: id,
+    fullName: decoded.unique_name ?? decoded.name ?? '',
+    userPortals: decoded.userPortals ?? []
+  };
+  console.log('[AuthGuard] Saving SSO user:', user);
+  tokenStore.saveUser(user);
+  sessionStorage.setItem(SESSION_FLAG_USER, '1');
+  console.groupEnd();
 }
 function redirectToPortal(router) {
+  console.warn('[AuthGuard] Redirecting to portal:', _environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.portalUrl);
   window.location.href = _environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.portalUrl;
   return false;
 }
@@ -1374,6 +1468,7 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 const environment = {
   production: false,
+  bypassAuth: false,
   // apiUrl: 'http://adminstagebe.markaziatest.com/api',
   // apiUrl2: 'http://treasurystagebe.markaziatest.com/api',
   apiUrl: 'https://dxdevmasterold.markaziaapis.com/api',
@@ -1383,7 +1478,7 @@ const environment = {
   portalUrl: 'https://dxdevportal.markaziahub.com/',
   version: '1.0.0',
   googleMapKey: 'AIzaSyAAQ7GPIxJs5PTBccmO9OZwBUy464p59bY',
-  generalToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1laWQiOiIxMDE0MzYiLCJ1bmlxdWVfbmFtZSI6Ik9NQU1BIEFITUFEIE1BSE1PVUQgQUtPVVIiLCJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9tb2JpbGVwaG9uZSI6Ijk2Mjc5OTQ4NzU3MSIsIkJyYW5jaElkIjoiMjQiLCJSb2xlIjoie1wiUm9sZUlkXCI6MSxcIk5hbWVcIjpcIkNhc2hpZXJcIn0iLCJDaXR5IjoiQW1tYW4iLCJSZWdpc3RlciI6IiIsIlJlZ2lzdGVyMiI6IiIsIkJyYW5jaCI6IntcIkJyYW5jaElkXCI6MjQsXCJCcmFuY2hOYW1lXCI6XCJCcmFuY2ggVGVzdFwifSIsIm5iZiI6MTc2MDk0NzgwNSwiZXhwIjoxNzYzNjI2MjA1LCJpYXQiOjE3NjA5NDc4MDV9.qChEDcOncKSAaf8ZAD6xa-OQVUO4cASum4mJ095EDq0'
+  generalToken: ''
 };
 
 /***/ }),
