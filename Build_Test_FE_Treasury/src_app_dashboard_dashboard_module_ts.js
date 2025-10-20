@@ -421,6 +421,18 @@ class HeaderComponent {
         this.email = user.Email || '';
         return;
       }
+      const currentUserRaw = localStorage.getItem('currentUser');
+      if (currentUserRaw) {
+        const currentUser = JSON.parse(currentUserRaw);
+        if (currentUser?.unique_name) {
+          const nameParts = currentUser.unique_name.trim().split(' ');
+          this.firstName = nameParts[0] || '';
+          this.lastName = nameParts.slice(1).join(' ') || '';
+          this.fullName = currentUser.unique_name;
+          this.email = currentUser.Email || currentUser['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress'] || '';
+          return;
+        }
+      }
       const fullNameFromStorage = localStorage.getItem('fullName');
       if (fullNameFromStorage) {
         const parts = fullNameFromStorage.split(' ');
