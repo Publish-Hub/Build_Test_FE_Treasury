@@ -746,7 +746,10 @@ class JwtInterceptor {
    * - Uses "Authorization" in normal mode
    */
   addAuth(req, token) {
-    const headerName = this.tokenStore.isSingleSignOnMode ? 'HubAuthorization' : 'Authorization';
+    // const headerName = this.tokenStore.isSingleSignOnMode
+    //     ? 'HubAuthorization'
+    //     : 'Authorization';
+    const headerName = 'Authorization';
     return req.clone({
       setHeaders: {
         [headerName]: `Bearer ${token}`
@@ -1251,9 +1254,6 @@ class TokenService {
   }
   setToken(accessToken) {
     localStorage.setItem(TOKEN_KEY, accessToken);
-  }
-  get refreshToken() {
-    return localStorage.getItem(REFRESH_TOKEN_KEY) || sessionStorage.getItem(REFRESH_TOKEN_KEY);
   }
   setRefreshToken(token) {
     if (token) {
