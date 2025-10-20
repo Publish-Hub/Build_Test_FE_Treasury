@@ -679,7 +679,6 @@ class JwtInterceptor {
     this.router = router;
     this.getAccessEndpoint = `${src_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.masterBaseUrl.replace(/\/+$/, '')}/${_api_urls__WEBPACK_IMPORTED_MODULE_1__.ApiUrls.User.GetAccess.replace(/^\/+/, '')}`;
     this.refreshEndpoint = `${src_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.masterBaseUrl.replace(/\/+$/, '')}/${_api_urls__WEBPACK_IMPORTED_MODULE_1__.ApiUrls.User.RefreshThirdPartyToken.replace(/^\/+/, '')}`;
-    this.isSsoMode = this.tokenStore.isSingleSignOnMode;
     this.rawHttp = new _angular_common_http__WEBPACK_IMPORTED_MODULE_4__.HttpClient(handler);
   }
   isTokenEndpoint(url) {
@@ -694,7 +693,7 @@ class JwtInterceptor {
     return next.handle(authedReq).pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_5__.mergeMap)(event => {
       if (event instanceof _angular_common_http__WEBPACK_IMPORTED_MODULE_4__.HttpResponse) {
         const body = event.body;
-        if (event.url?.startsWith(this.getAccessEndpoint) && body?.Status === true) {
+        if (event.url?.startsWith(this.getAccessEndpoint) && body?.originalResponse?.Status === true) {
           this.saveUserFromGetAccess(body);
         }
         if (body?.Status === false && (body?.Error === 'Token has expired' || body?.Message === 'Token has expired')) {
@@ -705,23 +704,26 @@ class JwtInterceptor {
         }
       }
       return (0,rxjs__WEBPACK_IMPORTED_MODULE_6__.of)(event);
-    }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_7__.catchError)(err => {
-      return this.handleError(err, authedReq, next);
-    }));
+    }), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_7__.catchError)(err => this.handleError(err, authedReq, next)));
   }
   saveUserFromGetAccess(res) {
-    const d = res?.Data;
-    if (!d) return;
-    const id = d.EmployeeID && d.EmployeeID !== 0 ? d.EmployeeID : d.ID && d.ID !== 0 ? d.ID : d.MarkaziaUserID ?? null;
-    const fullName = [d.FirstName, d.SecondName, d.ThirdName, d.LastName].filter(Boolean).join(' ') || d.Email || '';
+    const data = res?.originalResponse?.Data;
+    const enhanced = res?.enhancedUserDetails;
+    if (!data) return;
+    const id = data.EmployeeID && data.EmployeeID !== 0 ? data.EmployeeID : data.ID && data.ID !== 0 ? data.ID : data.MarkaziaUserID ?? null;
+    const fullName = enhanced?.userDetails?.fullName || [data.FirstName, data.SecondName, data.ThirdName, data.LastName].filter(Boolean).join(' ') || data.Email || '';
+    const email = enhanced?.userDetails?.userEmail || data.Email || '';
     this.tokenStore.saveUser({
       nameid: id,
       UserID: id,
-      EmployeeID: d.EmployeeID ?? d.ID ?? null,
-      EmpNo: d.EmpNo ?? null,
-      Email: d.Email ?? '',
+      EmployeeID: data.EmployeeID ?? data.ID ?? null,
+      EmpNo: data.EmpNo ?? null,
+      Email: email,
       fullName,
-      userPortals: []
+      userPortals: [],
+      role: enhanced?.roles?.roleName ?? null,
+      city: enhanced?.city ?? null,
+      profileImage: enhanced?.userDetails?.profileImage ?? ''
     });
     this.tokenStore.saveEmployeeInfo(res);
   }
@@ -754,18 +756,15 @@ class JwtInterceptor {
     return tokenSubject.pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_10__.filter)(t => !!t), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_11__.take)(1), (0,rxjs_operators__WEBPACK_IMPORTED_MODULE_9__.switchMap)(t => next.handle(this.addAuth(req, t))));
   }
   /**
-  * Dynamically attaches the correct header for local or SSO authentication.
-  * - Uses "HubAuthorization" in SSO mode
-  * - Uses "Authorization" in normal mode
-  * - Skips adding auth header for GetAccess or RefreshThirdPartyToken requests
-  */
+   * Dynamically attaches the correct header for local or SSO authentication.
+   */
   addAuth(req, token) {
     const url = req.url.toLowerCase();
     // Skip adding auth header for specific endpoints
     if (url.includes('getaccess') || url.includes('refreshthirdpartytoken')) {
       return req;
     }
-    const headerName = this.isSsoMode ? 'HubAuthorization' : 'Authorization';
+    const headerName = this.tokenStore.isSingleSignOnMode ? 'HubAuthorization' : 'Authorization';
     return req.clone({
       setHeaders: {
         [headerName]: `Bearer ${token}`
@@ -1355,17 +1354,78 @@ class TokenService {
     } catch {}
   }
   get getUser() {
-    const raw = localStorage.getItem(USER_KEY);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
+    const cached = localStorage.getItem(USER_KEY);
+    const employeeCache = localStorage.getItem('employeeData');
+    let employeeInfo = null;
+    if (employeeCache) {
+      try {
+        const parsed = JSON.parse(employeeCache);
+        employeeInfo = parsed?.Data ?? null;
+      } catch {
+        console.warn('Invalid employeeData format in localStorage');
+      }
     }
-  }
-  get currentUserId() {
-    const u = this.getUser || {};
-    return u?.nameid ?? u?.UserID ?? null;
+    if (cached) {
+      try {
+        const obj = JSON.parse(cached);
+        if (employeeInfo?.EmployeeID) {
+          obj.EmployeeID = employeeInfo.EmployeeID;
+          obj.nameid = employeeInfo.EmployeeID;
+          obj.UserID = employeeInfo.EmployeeID;
+        }
+        if (obj.UserID || obj.nameid) return {
+          ...obj,
+          ...this.portalPatch(obj)
+        };
+      } catch (err) {
+        console.error('Error parsing cached user', err);
+      }
+    }
+    const token = this.token || this.ssoAccessToken;
+    if (token) {
+      try {
+        const payloadBase64Url = token.split('.')[1] ?? '';
+        const b64 = payloadBase64Url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payloadBase64Url.length / 4) * 4, '=');
+        const payloadJson = atob(b64);
+        const p = JSON.parse(payloadJson);
+        console.log('Decoded JWT payload:', p);
+        const id = this.extractUserId(p);
+        let role = null;
+        let branch = null;
+        try {
+          role = typeof p.Role === 'string' ? JSON.parse(p.Role) : p.Role;
+        } catch {}
+        try {
+          branch = typeof p.Branch === 'string' ? JSON.parse(p.Branch) : p.Branch;
+        } catch {}
+        const fullName = p.fullName ?? p.unique_name ?? p.name ?? p.UserTitleEn ?? p['given_name'] ?? '';
+        const employeeID = employeeInfo?.EmployeeID ?? null;
+        return {
+          nameid: employeeID ?? id,
+          UserID: employeeID ?? id,
+          EmployeeID: employeeID ?? null,
+          unique_name: p.unique_name ?? p.name ?? '',
+          fullName,
+          mobile: p['http://schemas.xmlsoap.org/ws/2005/05/identity/claims/mobilephone'] ?? employeeInfo?.MobileNumber ?? '',
+          email: employeeInfo?.Email ?? '',
+          branchId: p.BranchId ?? branch?.BranchId ?? null,
+          branchName: branch?.BranchName ?? null,
+          roleId: role?.RoleId ?? null,
+          roleName: role?.Name ?? null,
+          city: p.City ?? '',
+          register: p.Register ?? '',
+          register2: p.Register2 ?? '',
+          issuedAt: p.iat ?? null,
+          expiresAt: p.exp ?? null,
+          notBefore: p.nbf ?? null,
+          rawPayload: p,
+          ...this.portalPatch({})
+        };
+      } catch (err) {
+        console.error('Error decoding token', err);
+      }
+    }
+    return {};
   }
   saveEmployeeInfo(data) {
     if (!data) return;
@@ -1374,6 +1434,26 @@ class TokenService {
     } catch (err) {
       console.error('Error saving employee info', err);
     }
+  }
+  extractUserId(payload) {
+    if (!payload) return null;
+    if (payload.EmployeeID) return String(payload.EmployeeID);
+    if (payload.EmpNo) return String(payload.EmpNo);
+    const keys = ['nameid', 'sid', 'sub', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/sid', 'http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier'];
+    for (const k of keys) {
+      if (payload?.[k]) return String(payload[k]);
+    }
+    return null;
+  }
+  portalPatch(src) {
+    const pid = localStorage.getItem('userPortal');
+    return pid ? {
+      portalID: pid
+    } : src;
+  }
+  get currentUserId() {
+    const u = this.getUser || {};
+    return u?.nameid ?? u?.UserID ?? null;
   }
   clearTokens() {
     localStorage.removeItem(TOKEN_KEY);
