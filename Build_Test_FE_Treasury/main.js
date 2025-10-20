@@ -811,9 +811,6 @@ class AuthService {
     this._tokenSubject = new rxjs__WEBPACK_IMPORTED_MODULE_3__.BehaviorSubject(null);
     this.refreshUrl = `${_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.masterBaseUrl?.replace(/\/+$/, '')}/User/RefreshThirdPartyToken`;
   }
-  // ───────────────────────────
-  // User Info Helpers
-  // ───────────────────────────
   get userId() {
     const token = this.getDecodedToken();
     return token ? Number(token.nameid) : null;
@@ -835,12 +832,8 @@ class AuthService {
     }
     return (0,rxjs__WEBPACK_IMPORTED_MODULE_4__.of)(null);
   }
-  // ───────────────────────────
-  // Refresh Token Logic
-  // ───────────────────────────
   refreshToken(refreshToken) {
     if (this._isRefreshing) {
-      // Already refreshing, skip duplicate
       return this._tokenSubject.pipe((0,rxjs_operators__WEBPACK_IMPORTED_MODULE_5__.map)(token => ({
         accessToken: token || '',
         refreshToken
@@ -855,12 +848,10 @@ class AuthService {
       if (!res?.Status || !res?.Data?.AccessToken) {
         throw new Error(res?.Message || res?.Error || 'Invalid refresh response');
       }
-      // Save new cookies (MarkaziaAccessToken / MarkaziaRefreshToken)
       this.tokenService.ssoAccessTokenSet(res.Data.AccessToken);
       if (res.Data.RefreshToken) {
         this.tokenService.ssoRefreshTokenSet(res.Data.RefreshToken);
       }
-      // Notify interceptors / guards waiting for a new token
       this._tokenSubject.next(res.Data.AccessToken);
       return {
         accessToken: res.Data.AccessToken,
@@ -879,17 +870,6 @@ class AuthService {
       isRefreshing: this._isRefreshing,
       tokenSubject: this._tokenSubject.asObservable()
     };
-  }
-  // ───────────────────────────
-  // Logout Logic
-  // ───────────────────────────
-  logout() {
-    const url = _environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.portalUrl || (() => {
-      if (_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.includes('test')) return 'https://dx-portalstest.azurewebsites.net/main-menu';
-      if (_environments_environment__WEBPACK_IMPORTED_MODULE_0__.environment.apiUrl2.includes('dev')) return 'https://portals-dx-fe-dev.azurewebsites.net/main-menu';
-      return 'https://dx-portalsstage.azurewebsites.net/main-menu';
-    })();
-    window.location.href = url;
   }
 }
 AuthService.ɵfac = function AuthService_Factory(t) {
