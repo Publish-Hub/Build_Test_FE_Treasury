@@ -349,7 +349,6 @@ class HeaderComponent {
     } catch (error) {
       console.error('Error parsing Role from token:', error);
     }
-    // Safely read from localStorage
     const troleRaw = localStorage.getItem('trole');
     if (troleRaw) {
       try {
