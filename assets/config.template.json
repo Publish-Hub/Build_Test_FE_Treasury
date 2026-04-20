@@ -1,0 +1,14 @@
+{
+    "production": false,
+    "bypassAuth": true,
+    "apiUrl": "https://dxdevmasterold.markaziaapis.com/api",
+    "apiUrl2": "https://dxdevtreasury.markaziaapis.com/api",
+    "allowedDomains": [
+        "dxdevmasterold.markaziaapis.com",
+        "dxdevtreasury.markaziaapis.com"
+    ],
+    "masterBaseUrl": "https://dxdevmaster.markaziaapis.com/api/",
+    "portalUrl": "https://dxdevportal.markaziahub.com/",
+    "googleMapKey": "",
+    "generalToken": ""
+}
